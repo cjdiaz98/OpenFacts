@@ -157,8 +157,11 @@ class BookTreeParser(HTMLParser):
     pass
 
 args = sys.argv
+usage = "Usage: python BookTreeParser.py [-p] file_name|-help"
+
+
 if len(args) < 2 or args[1] == '-help':
-  print "USAGE: python BookTreeParser.py (-p) [file-name]|-help"
+  print usage
 else:
   flag_print_tree = False
   if '-p' in args:
@@ -166,8 +169,12 @@ else:
     args.remove('-p')
 
   parser = BookTreeParser()
-  with open(sys.argv[1]) as xhtml_input:
-    parser.feed(xhtml_input.read())
+  try:
+    with open(sys.argv[1]) as xhtml_input:
+      parser.feed(xhtml_input.read())
+  except:
+    print "ERROR: File " + sys.argv[1] + " could not be found!"
+    print usage
   if flag_print_tree:
     parser.root.print_as_root()
   print "DONE"
