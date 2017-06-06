@@ -1,5 +1,6 @@
 from HTMLParser import HTMLParser
 import re
+import sys
 
 class Stack(object):
   def __init__(self):
@@ -38,6 +39,7 @@ def enum(*sequential, **named):
     enums['to_string'] = reverse
     return type('Enum', (), enums)
 
+# TODO: Add SECTION (within chapter)
 NodeType = enum('BOOK', 'UNIT', 'CHAPTER', 'PAGE', 'FEATURE', 'TEXT')
 node_type_assign = {
   'note' : NodeType.FEATURE,
@@ -78,6 +80,7 @@ class BookTreeNode(object):
     return "<BOOK_NODE node_type=" + NodeType.to_string[self.node_type] + " cargo=" + str(self.cargo) + ">"
 
 class BookTreeParser(HTMLParser):
+  # TODO: Instead of a group of connected nodes, form a tree object with actual properties and methods
   def __init__(self):
     HTMLParser.__init__(self)
     self.full_parent_level = 0
@@ -125,6 +128,7 @@ class BookTreeParser(HTMLParser):
       text = re.sub( '\s+', ' ', data)
       parent = self.tree_parent_stack.peek()
       if self.titling:
+        # TODO: Stop Features from receiving titles
         if parent.cargo is None:
           parent.cargo = text
           self.titling = False
@@ -133,7 +137,7 @@ class BookTreeParser(HTMLParser):
         self.last_sibling = current_node
   
   def handle_entityref(self, data):
-    # TODO: Convert to unicode and append into surroundings
+    # TODO: Convert to unicode and append into surrounding text
     pass
 
   def handle_charref(self, name):
@@ -152,8 +156,18 @@ class BookTreeParser(HTMLParser):
   def handle_pi(self, data):
     pass
 
-parser = BookTreeParser()
-with open('biology-raw.xhtml') as xhtml_input:
-  parser.feed(xhtml_input.read())
-parser.root.print_as_root()
-print "done."
+args = sys.argv
+if len(args) < 2 or args[1] == '-help':
+  print "USAGE: python BookTreeParser.py (-p) [file-name]|-help"
+else:
+  flag_print_tree = False
+  if '-p' in args:
+    flag_print_tree = True
+    args.remove('-p')
+
+  parser = BookTreeParser()
+  with open(sys.argv[1]) as xhtml_input:
+    parser.feed(xhtml_input.read())
+  if flag_print_tree:
+    parser.root.print_as_root()
+  print "DONE"
