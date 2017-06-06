@@ -40,9 +40,10 @@ def enum(*sequential, **named):
     return type('Enum', (), enums)
 
 # TODO: Add SECTION (within chapter)
-NodeType = enum('BOOK', 'UNIT', 'CHAPTER', 'PAGE', 'FEATURE', 'TEXT')
+NodeType = enum('BOOK', 'UNIT', 'CHAPTER', 'PAGE', 'SECTION', 'FEATURE', 'TEXT')
 node_type_assign = {
   'note' : NodeType.FEATURE,
+  'section' : NodeType.SECTION,
   'page' : NodeType.PAGE,
   'chapter' : NodeType.CHAPTER,
   'unit' : NodeType.UNIT
@@ -66,12 +67,11 @@ class BookTreeNode(object):
   def add_child(self, child):
     self.children.append(child)
 
-  #TODO: Option to display node + siblings (if >1 top level elem is present)
   def print_as_root(self, level=0):
     if self.node_type != NodeType.TEXT:
       print "#",
       for _ in range(level):
-        print "| ",
+        print "|",
       print self
       for child in self.children:
         child.print_as_root(level + 1)
@@ -97,17 +97,19 @@ class BookTreeParser(HTMLParser):
     self.full_parent_level += 1
     if tag == 'title':
       self.titling = True
-    elif tag in ('div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
+    elif tag in ('div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section'):
+      if tag == 'section':
+        attrs.append(('data-type', 'section'))
       for attr_pair in attrs:
         if attr_pair[0] == 'data-type':
           data_type = attr_pair[1]
-          if data_type == 'note' or data_type == 'page' or data_type == 'chapter' or data_type == 'unit':
+          if data_type in node_type_assign:
             self.relevant_levels.append(self.full_parent_level)
             node_type = node_type_assign[data_type]
             opened_node = BookTreeNode(self.tree_parent_stack.peek(), self.last_sibling, node_type, None)
             self.tree_parent_stack.push(opened_node)
             self.last_sibling = None
-          elif data_type == 'document-title':
+          elif data_type in ('document-title', 'title'):
             self.titling = True
 
   def handle_endtag(self, tag):
@@ -128,8 +130,7 @@ class BookTreeParser(HTMLParser):
       text = re.sub( '\s+', ' ', data)
       parent = self.tree_parent_stack.peek()
       if self.titling:
-        # TODO: Stop Features from receiving titles
-        if parent.cargo is None:
+        if parent.cargo is None and parent.node_type != NodeType.FEATURE:
           parent.cargo = text
           self.titling = False
       else:
@@ -169,12 +170,8 @@ else:
     args.remove('-p')
 
   parser = BookTreeParser()
-  try:
-    with open(sys.argv[1]) as xhtml_input:
-      parser.feed(xhtml_input.read())
-  except:
-    print "ERROR: File " + sys.argv[1] + " could not be found!"
-    print usage
+  with open(sys.argv[1]) as xhtml_input:
+    parser.feed(xhtml_input.read())
   if flag_print_tree:
     parser.root.print_as_root()
   print "DONE"
