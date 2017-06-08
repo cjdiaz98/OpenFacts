@@ -53,10 +53,11 @@ def enum(*sequential, **named):
   enums['to_string'] = reverse
   return type('Enum', (), enums)
 
-NodeType = enum('BOOK', 'UNIT', 'CHAPTER', 'PAGE', 'SECTION', 'FEATURE', 'TEXT', 'IMG')
+NodeType = enum('BOOK', 'UNIT', 'CHAPTER', 'PAGE', 'SECTION', 'ABSTRACT', 'FEATURE', 'TEXT', 'IMG')
 node_type_assign = {
   'img' : NodeType.IMG,
   'note' : NodeType.FEATURE,
+  'abstract' : NodeType.ABSTRACT,
   'section' : NodeType.SECTION,
   'page' : NodeType.PAGE,
   'chapter' : NodeType.CHAPTER,
@@ -137,7 +138,10 @@ class BookTermParser(HTMLParser):
       self.open_term = True
   def handle_endtag(self, tag):
     if tag == 'dt':
-      self.terms.append(self.buffer)
+      term_text = self.buffer
+      # Don't add duplicates
+      if term_text not in self.terms:
+        self.terms.append(term_text)
       self.buffer = ''
       self.open_term = False
       # Show progress
@@ -169,9 +173,12 @@ class BookTreeParser(HTMLParser):
   def handle_starttag(self, tag, attrs):
     self.full_parent_level += 1
     if not self.within_metadata:
-      if tag in ('div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section', 'img'):
+      if tag in ('div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section', 'img', 'nav'):
         if tag == 'section':
           attrs.append(('data-type', 'section'))
+        elif tag == 'nav':
+          self.within_metadata = True
+          self.relevant_levels.append(self.full_parent_level)
         for attr_pair in attrs:
           if attr_pair[0] == 'data-type':
             data_type = attr_pair[1]
@@ -261,16 +268,14 @@ class BookTreeParser(HTMLParser):
   def handle_data(self, data):
     if not self.within_metadata:
       if not data.isspace():
-        text = re.sub( '\s+', ' ', data).decode('utf-8')
+        text = re.sub( '\s+', ' ', data)
         parent = self.tree_parent_stack.peek()
         if self.titling:
-          if parent.cargo is None and parent.node_type != NodeType.FEATURE:
+          if parent.cargo is None:
             parent.cargo = text
             self.titling = False
-          elif parent.node_type == NodeType.FEATURE:
-            self.titling = False
         else:
-          if self.last_sibling is not None and self.last_sibling.node_type == NodeType.TEXT:
+          if self.last_sibling is not None and self.last_sibling.node_type == NodeType.TEXT and parent.node_type != NodeType.ABSTRACT:
             self.last_sibling.cargo += text
           else:
             current_node = BookTreeNode(parent, self.last_sibling, NodeType.TEXT, text)
@@ -383,6 +388,7 @@ else:
     node = tree_nodes[x]
     text = node.cargo
     if text is not None:
+      text = text.lower()
       for term in terms:
         if term in text:
           term_sentences[term].append(node)
@@ -392,12 +398,12 @@ else:
   if flag_search_tree:
     appearances = term_sentences[search_term]
     for node in appearances:
-      print node.__repr__().replace(search_term, bcolors.OKGREEN + search_term + bcolors.ENDC)
+      print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
 
   if flag_print_terms:
     print terms
 
   if flag_print_tree:
-    parser.root.print_as_root()
+    tree.root.print_as_root()
 
   print "DONE"
