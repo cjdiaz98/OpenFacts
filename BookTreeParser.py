@@ -319,6 +319,69 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+def parse_book_file(args, flag_help=False, flag_search_tree=False, flag_print_tree=False, flag_print_terms=False):
+  if flag_help or len(args) != 2:
+    print_help()
+  else:
+    file_name = sys.argv[1]
+
+    with open(file_name) as xhtml_lines:
+      num_lines = sum(1 for line in xhtml_lines)
+
+    print "Searching for terms in " + file_name + "..."
+    term_parser = BookTermParser(num_lines)
+    with open(file_name) as xhtml_terms:
+      term_parser.feed(xhtml_terms.read())
+    terms = term_parser.terms
+    printProgressBar(term_parser.file_lines, term_parser.file_lines)
+    
+
+    print "Parsing " + file_name + " into a tree..."
+    tree_parser = BookTreeParser(num_lines)
+    with open(file_name) as xhtml_tree:
+      tree_parser.feed(xhtml_tree.read())
+    printProgressBar(tree_parser.file_lines, tree_parser.file_lines)
+
+    tree = BookTree(tree_parser.root)
+    tree_nodes = tree.get_nodes()
+    num_nodes = len(tree_nodes)
+    # print BookTreeNode.count
+
+    # Search a single value (maybe use this if search_term is not a glossary term?)
+    # if flag_search_tree:
+    #   for node in tree:
+    #     text = node.cargo
+    #     if text is not None:
+    #       if search_term in text :
+    #         print node.__repr__().replace(search_term, bcolors.OKGREEN + search_term + bcolors.ENDC)
+    # print tree.size()
+
+    print "Finding terms in tree..."
+    term_sentences = {term : [] for term in terms}
+    for x in range(num_nodes):
+      node = tree_nodes[x]
+      text = node.cargo
+      if text is not None:
+        text = text.lower()
+        for term in terms:
+          if term in text:
+            term_sentences[term].append(node)
+      printProgressBar(x, num_nodes)  
+    printProgressBar(num_nodes, num_nodes)
+
+    if flag_search_tree:
+      appearances = term_sentences[search_term]
+      for node in appearances:
+        print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
+
+    if flag_print_terms:
+      print terms
+
+    if flag_print_tree:
+      tree.root.print_as_root()
+
+    print "DONE"
+
 args = sys.argv
 
 flag_print_tree = False
@@ -345,65 +408,4 @@ if '-help' in args:
   flag_help = True
   args.remove('-help')
 
-
-if flag_help or len(args) != 2:
-  print_help()
-else:
-  file_name = sys.argv[1]
-
-  with open(file_name) as xhtml_lines:
-    num_lines = sum(1 for line in xhtml_lines)
-
-  print "Searching for terms in " + file_name + "..."
-  term_parser = BookTermParser(num_lines)
-  with open(file_name) as xhtml_terms:
-    term_parser.feed(xhtml_terms.read())
-  terms = term_parser.terms
-  printProgressBar(term_parser.file_lines, term_parser.file_lines)
-  
-
-  print "Parsing " + file_name + " into a tree..."
-  tree_parser = BookTreeParser(num_lines)
-  with open(file_name) as xhtml_tree:
-    tree_parser.feed(xhtml_tree.read())
-  printProgressBar(tree_parser.file_lines, tree_parser.file_lines)
-
-  tree = BookTree(tree_parser.root)
-  tree_nodes = tree.get_nodes()
-  num_nodes = len(tree_nodes)
-  # print BookTreeNode.count
-
-  # Search a single value
-  # if flag_search_tree:
-  #   for node in tree:
-  #     text = node.cargo
-  #     if text is not None:
-  #       if search_term in text :
-  #         print node.__repr__().replace(search_term, bcolors.OKGREEN + search_term + bcolors.ENDC)
-  # print tree.size()
-
-  print "Finding terms in tree..."
-  term_sentences = {term : [] for term in terms}
-  for x in range(num_nodes):
-    node = tree_nodes[x]
-    text = node.cargo
-    if text is not None:
-      text = text.lower()
-      for term in terms:
-        if term in text:
-          term_sentences[term].append(node)
-    printProgressBar(x, num_nodes)  
-  printProgressBar(num_nodes, num_nodes)
-
-  if flag_search_tree:
-    appearances = term_sentences[search_term]
-    for node in appearances:
-      print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
-
-  if flag_print_terms:
-    print terms
-
-  if flag_print_tree:
-    tree.root.print_as_root()
-
-  print "DONE"
+parse_book_file(args, flag_help, flag_search_tree, flag_print_tree, flag_print_terms)
