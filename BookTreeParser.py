@@ -6,6 +6,7 @@ sys.setdefaultencoding('utf8')
 
 from HTMLParser import HTMLParser
 import re
+import TermRelate
 
 def printProgressBar (iteration, total, prefix = 'Progress: ', suffix = '', decimals = 1, length = 50, fill = '█'):
   percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
@@ -14,7 +15,7 @@ def printProgressBar (iteration, total, prefix = 'Progress: ', suffix = '', deci
   sys.stdout.write('\r %s |%s| %s%% %s' % (prefix, bar, percent, suffix))
   sys.stdout.flush()
   if iteration == total:
-    print()
+    print ""
 
 class Stack(object):
   def __init__(self):
@@ -53,6 +54,7 @@ def enum(*sequential, **named):
   enums['to_string'] = reverse
   return type('Enum', (), enums)
 
+# Need support for figures
 NodeType = enum('BOOK', 'UNIT', 'CHAPTER', 'PAGE', 'SECTION', 'ABSTRACT', 'FEATURE', 'TEXT', 'IMG')
 node_type_assign = {
   'img' : NodeType.IMG,
@@ -74,6 +76,11 @@ class BookTreeNode(object):
     self.sibling_next = None
     self.node_type = node_type
     self.cargo = cargo
+    
+    # A position is not received until a tree containing the BookTreeNode is iterated over
+    # Can't do it on first walk because of how text nodes are grouped
+    # Might lead to some unexpected behavior but... oh well
+    self.position = -1
 
     # BookTreeNode.count += 1
 
@@ -91,13 +98,13 @@ class BookTreeNode(object):
     # BookTreeNode.count -= 1
 
   def print_as_root(self, level=0):
-    if self.node_type != NodeType.TEXT:
-      print "#",
-      for _ in range(level):
-        print "|",
-      print self
-      for child in self.children:
-        child.print_as_root(level + 1)
+    # This method is really only useful for grepping
+    print "#",
+    for _ in range(level):
+      print "|",
+    print self
+    for child in self.children:
+      child.print_as_root(level + 1)
 
   def __repr__(self):
     return "<BOOK_NODE node_type=" + NodeType.to_string[self.node_type] + " cargo=" + str(self.cargo) + ">"
@@ -107,22 +114,27 @@ class BookTree(object):
     self.root = root
 
   def get_nodes(self):
-    nodes = []
+    node_list = []
     node = self.root
-    nodes.append(node)
+    node_list.append(node)
+    pos_count = [0]
+    pos_count[0] += 1
+    node.position = pos_count[0]
     for child in node.children:
-      self._get_nodes_append(nodes, child)
-    return nodes
+      self._get_nodes_append(node_list, child, pos_count)
+    return node_list
 
-  def _get_nodes_append(self, nodes, node):
-    nodes.append(node)
+  def _get_nodes_append(self, node_list, node, pos_count):
+    node_list.append(node)
+    pos_count[0] += 1
+    node.position = pos_count[0]
     for child in node.children:
-      self._get_nodes_append(nodes, child)
+      self._get_nodes_append(node_list, child, pos_count)
 
   def __iter__(self):
     return iter(self.get_nodes())
 
-  def size(self):
+  def __len__(self):
     return len(self.get_nodes())
 
 class BookTermParser(HTMLParser):
@@ -190,14 +202,7 @@ class BookTreeParser(HTMLParser):
               # Just in case
               self.titling = False
 
-              self.relevant_levels.append(self.full_parent_level)
-              node_type = node_type_assign[data_type]
-              opened_node = BookTreeNode(self.tree_parent_stack.peek(), self.last_sibling, node_type, None)
-              self.tree_parent_stack.push(opened_node)
-
-              # Show progress
-              printProgressBar(self.getpos()[0], self.file_lines)
-
+              # Resolve previous sentences first before adding current object to the tree for ordering purposes
               if self.last_sibling is not None and self.last_sibling.node_type == NodeType.TEXT:
                 common_parent = self.last_sibling.parent
                 sentences = re.findall('[^?.]*?[.?]', self.last_sibling.cargo)
@@ -206,6 +211,14 @@ class BookTreeParser(HTMLParser):
                   current_sentence = BookTreeNode(common_parent, prev_it_sibling, NodeType.TEXT, nth_sent)
                   prev_it_sibling = current_sentence
                 common_parent.rm_child(self.last_sibling)
+
+              self.relevant_levels.append(self.full_parent_level)
+              node_type = node_type_assign[data_type]
+              opened_node = BookTreeNode(self.tree_parent_stack.peek(), self.last_sibling, node_type, None)
+              self.tree_parent_stack.push(opened_node)
+
+              # Show progress
+              printProgressBar(self.getpos()[0], self.file_lines)
 
               self.last_sibling = None
             elif data_type in ('document-title', 'title'):
@@ -232,6 +245,7 @@ class BookTreeParser(HTMLParser):
     self.full_parent_level -= 1
 
   def handle_startendtag(self, tag, attrs):
+    # TODO: Include figcaption in img branches of tree
     if tag == 'img':
 
       if self.last_sibling is not None and self.last_sibling.node_type == NodeType.TEXT:
@@ -245,6 +259,7 @@ class BookTreeParser(HTMLParser):
 
       # Just in case
       self.titling = False
+
       img_node = None
       for attr_pair in attrs:
         if attr_pair[0] == 'src':
@@ -320,6 +335,7 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 def parse_book_file(args, flag_help=False, flag_search_tree=False, flag_print_tree=False, flag_print_terms=False):
+  # Take a file name as argument instead of list of arguments
   if flag_help or len(args) != 2:
     print_help()
   else:
@@ -343,8 +359,8 @@ def parse_book_file(args, flag_help=False, flag_search_tree=False, flag_print_tr
     printProgressBar(tree_parser.file_lines, tree_parser.file_lines)
 
     tree = BookTree(tree_parser.root)
-    tree_nodes = tree.get_nodes()
-    num_nodes = len(tree_nodes)
+    num_nodes = len(tree)
+    num_terms = len(terms)
     # print BookTreeNode.count
 
     # Search a single value (maybe use this if search_term is not a glossary term?)
@@ -357,22 +373,25 @@ def parse_book_file(args, flag_help=False, flag_search_tree=False, flag_print_tr
     # print tree.size()
 
     print "Finding terms in tree..."
-    term_sentences = {term : [] for term in terms}
-    for x in range(num_nodes):
-      node = tree_nodes[x]
+    term_nodes = {term : [] for term in terms}
+    for node in tree:
       text = node.cargo
       if text is not None:
         text = text.lower()
         for term in terms:
           if term in text:
-            term_sentences[term].append(node)
-      printProgressBar(x, num_nodes)  
-    printProgressBar(num_nodes, num_nodes)
+            term_nodes[term].append(node)
+      printProgressBar(node.position, num_nodes)
 
     if flag_search_tree:
-      appearances = term_sentences[search_term]
+      term_locs = []
+      appearances = term_nodes[search_term]
       for node in appearances:
         print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
+        term_locs.append(float(node.position)/num_nodes)
+      histo = TermRelate.pdf_hist(term_locs, 10)
+      print term_locs
+      TermRelate.graph_hist(histo)
 
     if flag_print_terms:
       print terms
