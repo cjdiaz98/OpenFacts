@@ -334,72 +334,67 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def parse_book_file(args, flag_help=False, flag_search_tree=False, flag_print_tree=False, flag_print_terms=False):
-  # Take a file name as argument instead of list of arguments
-  if flag_help or len(args) != 2:
-    print_help()
-  else:
-    file_name = sys.argv[1]
+def parse_book_file(file_name, flag_search_tree=False, flag_print_tree=False, flag_print_terms=False):
+  with open(file_name) as xhtml_lines:
+    num_lines = sum(1 for line in xhtml_lines)
 
-    with open(file_name) as xhtml_lines:
-      num_lines = sum(1 for line in xhtml_lines)
+  print "Searching for terms in " + file_name + "..."
+  term_parser = BookTermParser(num_lines)
+  with open(file_name) as xhtml_terms:
+    term_parser.feed(xhtml_terms.read())
+  terms = term_parser.terms
+  printProgressBar(term_parser.file_lines, term_parser.file_lines)
+  
 
-    print "Searching for terms in " + file_name + "..."
-    term_parser = BookTermParser(num_lines)
-    with open(file_name) as xhtml_terms:
-      term_parser.feed(xhtml_terms.read())
-    terms = term_parser.terms
-    printProgressBar(term_parser.file_lines, term_parser.file_lines)
-    
+  print "Parsing " + file_name + " into a tree..."
+  tree_parser = BookTreeParser(num_lines)
+  with open(file_name) as xhtml_tree:
+    tree_parser.feed(xhtml_tree.read())
+  printProgressBar(tree_parser.file_lines, tree_parser.file_lines)
 
-    print "Parsing " + file_name + " into a tree..."
-    tree_parser = BookTreeParser(num_lines)
-    with open(file_name) as xhtml_tree:
-      tree_parser.feed(xhtml_tree.read())
-    printProgressBar(tree_parser.file_lines, tree_parser.file_lines)
+  tree = BookTree(tree_parser.root)
+  num_nodes = len(tree)
+  num_terms = len(terms)
+  # print BookTreeNode.count
 
-    tree = BookTree(tree_parser.root)
-    num_nodes = len(tree)
-    num_terms = len(terms)
-    # print BookTreeNode.count
+  # Search a single value (maybe use this if search_term is not a glossary term?)
+  # if flag_search_tree:
+  #   for node in tree:
+  #     text = node.cargo
+  #     if text is not None:
+  #       if search_term in text :
+  #         print node.__repr__().replace(search_term, bcolors.OKGREEN + search_term + bcolors.ENDC)
+  # print tree.size()
 
-    # Search a single value (maybe use this if search_term is not a glossary term?)
-    # if flag_search_tree:
-    #   for node in tree:
-    #     text = node.cargo
-    #     if text is not None:
-    #       if search_term in text :
-    #         print node.__repr__().replace(search_term, bcolors.OKGREEN + search_term + bcolors.ENDC)
-    # print tree.size()
+  print "Finding terms in tree..."
+  term_nodes = {term : [] for term in terms}
+  for node in tree:
+    text = node.cargo
+    if text is not None:
+      text = text.lower()
+      for term in terms:
+        if term in text:
+          term_nodes[term].append(node)
+    printProgressBar(node.position, num_nodes)
 
-    print "Finding terms in tree..."
-    term_nodes = {term : [] for term in terms}
-    for node in tree:
-      text = node.cargo
-      if text is not None:
-        text = text.lower()
-        for term in terms:
-          if term in text:
-            term_nodes[term].append(node)
-      printProgressBar(node.position, num_nodes)
+  if flag_search_tree:
+    term_locs = []
+    appearances = term_nodes[search_term]
+    for node in appearances:
+      print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
+      term_locs.append(float(node.position)/num_nodes)
+    histo = TermRelate.pdf_hist(term_locs, 10)
+    # print term_locs
+    TermRelate.graph_hist(histo)
 
-    if flag_search_tree:
-      term_locs = []
-      appearances = term_nodes[search_term]
-      for node in appearances:
-        print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
-        term_locs.append(float(node.position)/num_nodes)
-      histo = TermRelate.pdf_hist(term_locs, 10)
-      print term_locs
-      TermRelate.graph_hist(histo)
+  if flag_print_terms:
+    print terms
 
-    if flag_print_terms:
-      print terms
+  if flag_print_tree:
+    tree.root.print_as_root()
 
-    if flag_print_tree:
-      tree.root.print_as_root()
+  print "DONE"
 
-    print "DONE"
 
 args = sys.argv
 
@@ -427,4 +422,8 @@ if '-help' in args:
   flag_help = True
   args.remove('-help')
 
-parse_book_file(args, flag_help, flag_search_tree, flag_print_tree, flag_print_terms)
+if flag_help or len(args) != 2:
+  print_help()
+else:
+  file_name = sys.argv[1]
+  parse_book_file(file_name, flag_search_tree, flag_print_tree, flag_print_terms)
