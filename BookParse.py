@@ -8,7 +8,7 @@ from HTMLParser import HTMLParser
 import re
 import TermRelate
 
-def printProgressBar (iteration, total, prefix = 'Progress: ', suffix = '', decimals = 1, length = 50, fill = '█'):
+def printProgressBar (iteration, total, prefix = 'Progress: ', suffix = '', decimals = 1, length = 30, fill = '█'):
   percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
   filledLength = int(length * iteration // total)
   bar = fill * filledLength + ' ' * (length - filledLength)
@@ -67,8 +67,6 @@ node_type_assign = {
 }
 
 class BookTreeNode(object):
-  # count = 0
-
   def __init__(self, parent, sibling_prev, node_type, cargo):
     self.parent = parent
     self.children = []
@@ -82,8 +80,6 @@ class BookTreeNode(object):
     # Might lead to some unexpected behavior but... oh well
     self.position = -1
 
-    # BookTreeNode.count += 1
-
     if parent is not None:
       parent.add_child(self)
     self.sibling_prev = sibling_prev
@@ -95,7 +91,6 @@ class BookTreeNode(object):
 
   def rm_child(self, child):
     self.children.remove(child)
-    # BookTreeNode.count -= 1
 
   def print_as_root(self, level=0):
     # This method is really only useful for grepping
@@ -165,7 +160,6 @@ class BookTermParser(HTMLParser):
 
 
 class BookTreeParser(HTMLParser):
-  # TODO: Instead of a group of connected nodes, form a tree object with actual properties and methods
   def __init__(self, file_lines):
     HTMLParser.__init__(self)
     self.full_parent_level = 0
@@ -317,24 +311,18 @@ class BookTreeParser(HTMLParser):
   def handle_pi(self, data):
     pass
 
-def print_help():
-  usage_help = "Usage: python BookTreeParser.py -help"
-  usage = "Usage: python BookTreeParser.py [-p] file_name [search_term]"
-  print usage
-  print usage_help
-
 # Just copy-pasted, we may want different colors for testing and whatnot
 class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
+  HEADER = '\033[95m'
+  OKBLUE = '\033[94m'
+  OKGREEN = '\033[92m'
+  WARNING = '\033[93m'
+  FAIL = '\033[91m'
+  ENDC = '\033[0m'
+  BOLD = '\033[1m'
+  UNDERLINE = '\033[4m'
 
-def parse_book_file(file_name, flag_search_tree=False, flag_print_tree=False, flag_print_terms=False):
+def find_book_terms(file_name):
   with open(file_name) as xhtml_lines:
     num_lines = sum(1 for line in xhtml_lines)
 
@@ -342,29 +330,24 @@ def parse_book_file(file_name, flag_search_tree=False, flag_print_tree=False, fl
   term_parser = BookTermParser(num_lines)
   with open(file_name) as xhtml_terms:
     term_parser.feed(xhtml_terms.read())
-  terms = term_parser.terms
   printProgressBar(term_parser.file_lines, term_parser.file_lines)
-  
+  return term_parser.terms
 
+def parse_into_tree(file_name):
+  with open(file_name) as xhtml_lines:
+    num_lines = sum(1 for line in xhtml_lines)
+  
   print "Parsing " + file_name + " into a tree..."
   tree_parser = BookTreeParser(num_lines)
   with open(file_name) as xhtml_tree:
     tree_parser.feed(xhtml_tree.read())
   printProgressBar(tree_parser.file_lines, tree_parser.file_lines)
 
-  tree = BookTree(tree_parser.root)
+  return BookTree(tree_parser.root)
+
+def find_terms_in_tree(terms, tree):
   num_nodes = len(tree)
   num_terms = len(terms)
-  # print BookTreeNode.count
-
-  # Search a single value (maybe use this if search_term is not a glossary term?)
-  # if flag_search_tree:
-  #   for node in tree:
-  #     text = node.cargo
-  #     if text is not None:
-  #       if search_term in text :
-  #         print node.__repr__().replace(search_term, bcolors.OKGREEN + search_term + bcolors.ENDC)
-  # print tree.size()
 
   print "Finding terms in tree..."
   term_nodes = {term : [] for term in terms}
@@ -376,16 +359,36 @@ def parse_book_file(file_name, flag_search_tree=False, flag_print_tree=False, fl
         if term in text:
           term_nodes[term].append(node)
     printProgressBar(node.position, num_nodes)
+  return term_nodes
 
-  if flag_search_tree:
-    term_locs = []
-    appearances = term_nodes[search_term]
-    for node in appearances:
-      print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
-      term_locs.append(float(node.position)/num_nodes)
-    histo = TermRelate.pdf_hist(term_locs, 10)
-    # print term_locs
-    TermRelate.graph_hist(histo)
+# Usage Example
+def parse_book_file(file_name, search_term=None, flag_print_tree=False, flag_print_terms=False):
+
+  terms = find_book_terms(file_name)
+  tree = parse_into_tree(file_name)
+
+  term_nodes = find_terms_in_tree(terms, tree)
+
+  num_nodes = len(tree)
+  num_terms = len(terms)
+
+  if search_term is not None:
+    if search_term in terms:
+      term_locs = []
+      appearances = term_nodes[search_term]
+      for node in appearances:
+        print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
+        term_locs.append(float(node.position)/num_nodes)
+      histo = TermRelate.pdf_hist(term_locs, 10)
+      # print term_locs
+      TermRelate.graph_hist(histo)
+    else:
+      for node in tree:
+        text = node.cargo
+        if text is not None:
+          if search_term in text:
+            print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
+      print "\'" + search_term + "\' is not a glossary term, but returned the above results!"
 
   if flag_print_terms:
     print terms
@@ -394,36 +397,3 @@ def parse_book_file(file_name, flag_search_tree=False, flag_print_tree=False, fl
     tree.root.print_as_root()
 
   print "DONE"
-
-
-args = sys.argv
-
-flag_print_tree = False
-if '-p' in args:
-  flag_print_tree = True
-  args.remove('-p')
-
-flag_print_terms = False
-if '-t' in args:
-  flag_print_terms = True
-  args.remove('-t')
-
-flag_search_tree = False
-for x in range(len(args)):
-  if args[x] == '-s':
-    flag_search_tree = True
-    search_term = args[x + 1]
-    del args[x]
-    del args[x]
-    break
-
-flag_help = False
-if '-help' in args:
-  flag_help = True
-  args.remove('-help')
-
-if flag_help or len(args) != 2:
-  print_help()
-else:
-  file_name = sys.argv[1]
-  parse_book_file(file_name, flag_search_tree, flag_print_tree, flag_print_terms)
