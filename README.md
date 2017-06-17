@@ -41,7 +41,7 @@
     - `flag_print_terms`: whether or not to print a list of all terms found in the tree
 
 # Objects
-  - BookTreeNode
+  - `BookTreeNode`
     - Properties
       - parent (BookTreeNode): the parent node
       - children ([BookTreeNode]): a list of all children nodes
@@ -79,7 +79,7 @@
       - 'IMG': An image in the book
         - cargo: the partial url to the image
         - children: text nodes representing the alt-text of the image and the caption of the image
-  - BookTree
+  - `BookTree`
     - Iterable
       - Example: `for nodes in tree` will loop through all nodes in the tree
     - Size
