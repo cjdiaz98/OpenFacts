@@ -365,22 +365,23 @@ def parse_book_file(file_name, search_term=None, flag_print_tree=False, flag_pri
   num_terms = len(terms)
 
   if search_term is not None:
+    term_locs = []
     if search_term in terms:
-      term_locs = []
       appearances = term_nodes[search_term]
       for node in appearances:
         print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
         term_locs.append(float(node.position)/num_nodes)
-      histo = termrelate.pdf_hist(term_locs, 10)
-      # print term_locs
-      termrelate.graph_hist(histo)
     else:
       for node in tree:
         text = node.cargo
         if text is not None:
-          if search_term in text:
+          if search_term in text.lower():
             print re.sub('('+search_term+')', bcolors.OKGREEN+r'\1'+bcolors.ENDC, node.__repr__(), flags=re.I)
-      print "\'" + search_term + "\' is not a glossary term, but returned the above results!"
+            term_locs.append(float(node.position)/num_nodes)
+      print "INFO: \'" + search_term + "\' is not a glossary term, but returned the above results!"
+    histo = termrelate.pdf_hist(term_locs, 10)
+    # print term_locs
+    termrelate.graph_hist(histo)
 
   if flag_print_terms:
     print terms
