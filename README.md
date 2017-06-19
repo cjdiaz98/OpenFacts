@@ -49,7 +49,7 @@
       - sibling_prev (BookTreeNode): the node's postceding sibling
       - node_type (NodeType): the type of node
       - cargo (string): a string associated with a node
-      - position (int): the node's position in the tree (e.g. node 10 in a tree of size 20)
+      - position (int): the node's depth-first position in the tree (e.g. node 10 in a tree of size 20)
     - Methods
       - `add_child(node)`: 
         - Input: (BookTreeNode) the node to be added as a child to the node
@@ -81,11 +81,11 @@
         - children: text nodes representing the alt-text of the image and the caption of the image
   - `BookTree`
     - Iterable
-      - Example: `for nodes in tree` will loop through all nodes in the tree
+      - Example: `for nodes in tree` will loop through all nodes in the tree in a depth-first order
     - Size
       - Example: `len(tree)` returns the number of nodes in the tree
     - Properties
       - root (BookTreeNode): the root node of the tree
     - Methods
       - `get_nodes()` 
-        - Output: ([BookTreeNode]) list of all nodes in the tree
+        - Output: ([BookTreeNode]) list of all nodes in the tree in the order they would appear on a webpage, e.i. listed in depth-first order
