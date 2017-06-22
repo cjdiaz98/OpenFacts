@@ -1,5 +1,8 @@
 # encoding=utf8
+# -*- coding: utf-8 -*-
+
 import sys
+from enum import Enum
 
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -40,15 +43,31 @@ class Stack(object):
   def __repr__(self):
     return str(self.items)
 
-def enum(*sequential, **named):
-  enums = dict(zip(sequential, range(len(sequential))), **named)
-  reverse = dict((value, key) for key, value in enums.iteritems())
-  enums['to_string'] = reverse
-  return type('Enum', (), enums)
+# def enum(*sequential, **named):
+#   enums = dict(zip(sequential, range(len(sequential))), **named)
+#   reverse = dict((value, key) for key, value in enums.iteritems())
+#   enums['to_string'] = reverse
+#   return type('Enum', (), enums)
 
-# Need support for figures
-NodeType = enum('BOOK', 'UNIT', 'CHAPTER', 'PAGE', 'SECTION', 'ABSTRACT', 'FEATURE', 'TEXT', 'IMG')
+# # Need support for figures
+# NodeType = enum('BOOK', 'UNIT', 'CHAPTER', 'PAGE', 'SECTION', 'ABSTRACT', 'FEATURE', 'TEXT', 'FIGURE', 'CAPTION', 'IMG')
+
+class NodeType(Enum):
+  BOOK = 1
+  UNIT = 2
+  CHAPTER = 3
+  PAGE = 4
+  SECTION = 5
+  ABSTRACT = 6
+  FEATURE = 7
+  TEXT = 8
+  FIGURE = 9
+  CAPTION = 10
+  IMG = 11
+
 node_type_assign = {
+  'caption' : NodeType.CAPTION,
+  'figure' : NodeType.FIGURE,
   'img' : NodeType.IMG,
   'note' : NodeType.FEATURE,
   'abstract' : NodeType.ABSTRACT,
@@ -94,7 +113,7 @@ class BookTreeNode(object):
       child.print_as_root(level + 1)
 
   def __repr__(self):
-    return "<BOOK_NODE node_type=" + NodeType.to_string[self.node_type] + " cargo=" + str(self.cargo) + ">"
+    return "<BOOK_NODE node_type=" + self.node_type.name + " cargo=" + str(self.cargo) + ">"
 
 class BookTree(object):
   def __init__(self, root):
@@ -159,6 +178,7 @@ class BookTreeParser(HTMLParser):
     self.tree_parent_stack = Stack()
     self.titling = False
     self.within_metadata = False
+    self.open_figure = None
     self.last_sibling = None
 
     #for progress tracking
@@ -171,12 +191,16 @@ class BookTreeParser(HTMLParser):
   def handle_starttag(self, tag, attrs):
     self.full_parent_level += 1
     if not self.within_metadata:
-      if tag in ('div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section', 'img', 'nav'):
+      if tag in ('div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'section', 'img', 'nav', 'figure', 'figcaption'):
         if tag == 'section':
           attrs.append(('data-type', 'section'))
         elif tag == 'nav':
           self.within_metadata = True
           self.relevant_levels.append(self.full_parent_level)
+        elif tag == 'figure':
+          attrs.append(('data-type', 'figure'))
+        elif tag == 'figcaption':
+          attrs.append(('data-type', 'caption'))
         for attr_pair in attrs:
           if attr_pair[0] == 'data-type':
             data_type = attr_pair[1]
@@ -191,7 +215,7 @@ class BookTreeParser(HTMLParser):
               # Resolve previous sentences first before adding current object to the tree for ordering purposes
               if self.last_sibling is not None and self.last_sibling.node_type == NodeType.TEXT:
                 common_parent = self.last_sibling.parent
-                sentences = re.findall('[^?.]*?[.?]', self.last_sibling.cargo)
+                sentences = re.findall('[^?.!]*?[.?!]', self.last_sibling.cargo)
                 prev_it_sibling = self.last_sibling.sibling_prev
                 for nth_sent in sentences:
                   current_sentence = BookTreeNode(common_parent, prev_it_sibling, NodeType.TEXT, nth_sent)
@@ -220,7 +244,7 @@ class BookTreeParser(HTMLParser):
       else:
         if self.last_sibling is not None and self.last_sibling.node_type == NodeType.TEXT:
           common_parent = self.last_sibling.parent
-          sentences = re.findall('[^?.]*?[.?]', self.last_sibling.cargo)
+          sentences = re.findall('[^?.!]*?[.?!]', self.last_sibling.cargo)
           prev_it_sibling = self.last_sibling.sibling_prev
           for nth_sent in sentences:
             current_sentence = BookTreeNode(common_parent, prev_it_sibling, NodeType.TEXT, nth_sent)
@@ -236,7 +260,7 @@ class BookTreeParser(HTMLParser):
 
       if self.last_sibling is not None and self.last_sibling.node_type == NodeType.TEXT:
         common_parent = self.last_sibling.parent
-        sentences = re.findall('[^?.]*?[.?]', self.last_sibling.cargo)
+        sentences = re.findall('[^?.!]*?[.?!]', self.last_sibling.cargo)
         prev_it_sibling = self.last_sibling.sibling_prev
         for nth_sent in sentences:
           current_sentence = BookTreeNode(common_parent, prev_it_sibling, NodeType.TEXT, nth_sent)
@@ -258,7 +282,7 @@ class BookTreeParser(HTMLParser):
             img_alt = attr_pair[1]
             # Seperate image alt text into sentences...
             # Not sure if this is entirely necessary
-            sentences = re.findall('[^?.]*?[.?]', img_alt)
+            sentences = re.findall('[^?.!]*?[.?!]', img_alt)
             prev_it_sibling = None
             for nth_sent in sentences:
               current_sentence = BookTreeNode(img_node, prev_it_sibling, NodeType.TEXT, nth_sent)
@@ -290,6 +314,7 @@ class BookTreeParser(HTMLParser):
     # Note: Converting to unicode seems to slow everything down...?
     # self.handle_data(self.unescape('&'+data+';'))
     # self.handle_data('&'+data+';')
+    # self.handle_data(data.decode('utf-8'))
     pass
 
   def handle_charref(self, name):
